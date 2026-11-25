@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
-import java.util.Base64;
 import java.util.List;
 
 @RestController
@@ -18,9 +17,13 @@ public class PessoaController {
 
     private final PessoaService pessoaService;
 
+    /**
+     * Lista as pessoas. Com ?foto=false a foto (base64) nao e enviada, deixando a resposta
+     * bem mais leve para telas de listagem; nesse caso vem o campo "possuiFoto".
+     */
     @GetMapping("/listar")
-    public List<Pessoa> listarPessoas() {
-        return pessoaService.listarPessoas();
+    public List<?> listarPessoas(@RequestParam(defaultValue = "true") boolean foto) {
+        return foto ? pessoaService.listarPessoas() : pessoaService.listarPessoasResumo();
     }
 
     @GetMapping("/{cpf}")
@@ -29,6 +32,7 @@ public class PessoaController {
         return pessoa != null ? ResponseEntity.ok(pessoa) : ResponseEntity.notFound().build();
     }
 
+    /** Cadastro (multipart/form-data: cpf, nome, foto). Responde 409 se o CPF ja existir. */
     @PostMapping("/cadastro")
     public ResponseEntity<String> cadastroPessoa(
             @ModelAttribute PessoaDTO data

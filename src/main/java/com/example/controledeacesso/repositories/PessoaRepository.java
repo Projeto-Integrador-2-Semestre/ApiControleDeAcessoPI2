@@ -1,6 +1,7 @@
 package com.example.controledeacesso.repositories;
 
 import com.example.controledeacesso.db.D1Client;
+import com.example.controledeacesso.dto.PessoaResumoDTO;
 import com.example.controledeacesso.entity.Pessoa;
 import org.springframework.stereotype.Repository;
 
@@ -22,6 +23,19 @@ public class PessoaRepository {
     public List<Pessoa> findAll() {
         return d1.query("SELECT " + COLUNAS + " FROM pessoa ORDER BY nome")
                 .stream().map(PessoaRepository::mapear).toList();
+    }
+
+    /** Lista sem trazer a foto (base64) do banco, so indicando se ela existe. */
+    public List<PessoaResumoDTO> findAllResumo() {
+        return d1.query("""
+                SELECT cpf, nome, (foto IS NOT NULL AND foto <> '') AS possui_foto
+                FROM pessoa ORDER BY nome
+                """).stream()
+                .map(row -> new PessoaResumoDTO(
+                        (String) row.get("cpf"),
+                        (String) row.get("nome"),
+                        row.get("possui_foto") instanceof Number n && n.intValue() != 0))
+                .toList();
     }
 
     public Optional<Pessoa> findById(String cpf) {
