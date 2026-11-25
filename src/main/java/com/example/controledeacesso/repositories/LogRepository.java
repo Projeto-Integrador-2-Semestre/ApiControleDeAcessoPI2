@@ -8,6 +8,7 @@ import com.example.controledeacesso.entity.Pessoa;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -15,8 +16,9 @@ import java.util.Optional;
 @Repository
 public class LogRepository {
 
+    // A foto (base64) nao entra aqui: deixaria a listagem de logs pesada a toa.
     private static final String SELECT = """
-            SELECT l.id, l.pessoa_cpf, l.tipo, l.data_hora, p.nome, p.foto
+            SELECT l.id, l.pessoa_cpf, l.tipo, l.data_hora, p.nome
             FROM logs l
             LEFT JOIN pessoa p ON p.cpf = l.pessoa_cpf
             """;
@@ -42,13 +44,42 @@ public class LogRepository {
     }
 
     public List<Log> findByPessoaCpfAndTipoAcesso(String cpf, TipoAcesso tipoAcesso) {
-        return mapear(d1.query(SELECT + " WHERE l.pessoa_cpf = ? AND l.tipo = ?" + ORDENACAO,
-                cpf, tipoAcesso.name()));
+        return mapear(d1.query(SELECT + " WHERE l.pessoa_cpf = ? AND lower(l.tipo) = ?" + ORDENACAO,
+                cpf, tipoAcesso.valorBanco()));
     }
 
     public List<Log> findByPessoaCpfAndDataHora(String cpf, LocalDateTime dataHora) {
-        return mapear(d1.query(SELECT + " WHERE l.pessoa_cpf = ? AND l.data_hora = ?" + ORDENACAO,
+        return mapear(d1.query(SELECT + " WHERE l.pessoa_cpf = ? AND datetime(l.data_hora) = datetime(?)" + ORDENACAO,
                 cpf, SqliteDateTime.format(dataHora)));
+    }
+
+    /**
+     * Busca com filtros opcionais (nulos sao ignorados). As datas sao em UTC.
+     * datetime() normaliza os dois formatos gravados no banco: "2026-11-13T00:52:58.377Z"
+     * (face_api) e "2026-11-13 00:52:58" (DEFAULT CURRENT_TIMESTAMP).
+     */
+    public List<Log> buscar(String cpf, TipoAcesso tipo, LocalDateTime de, LocalDateTime ate, int limite) {
+        StringBuilder sql = new StringBuilder(SELECT).append(" WHERE 1=1");
+        List<Object> params = new ArrayList<>();
+        if (cpf != null && !cpf.isBlank()) {
+            sql.append(" AND l.pessoa_cpf = ?");
+            params.add(cpf);
+        }
+        if (tipo != null) {
+            sql.append(" AND lower(l.tipo) = ?");
+            params.add(tipo.valorBanco());
+        }
+        if (de != null) {
+            sql.append(" AND datetime(l.data_hora) >= ?");
+            params.add(SqliteDateTime.format(de));
+        }
+        if (ate != null) {
+            sql.append(" AND datetime(l.data_hora) <= ?");
+            params.add(SqliteDateTime.format(ate));
+        }
+        sql.append(ORDENACAO).append(" LIMIT ?");
+        params.add(limite);
+        return mapear(d1.query(sql.toString(), params.toArray()));
     }
 
     /** Insere um novo log. Se dataHora for nula, o banco usa CURRENT_TIMESTAMP. */
@@ -58,12 +89,12 @@ public class LogRepository {
             rows = d1.query("""
                     INSERT INTO logs (pessoa_cpf, tipo) VALUES (?, ?)
                     RETURNING id, data_hora
-                    """, log.getPessoa().getCpf(), log.getTipoAcesso().name());
+                    """, log.getPessoa().getCpf(), log.getTipoAcesso().valorBanco());
         } else {
             rows = d1.query("""
                     INSERT INTO logs (pessoa_cpf, tipo, data_hora) VALUES (?, ?, ?)
                     RETURNING id, data_hora
-                    """, log.getPessoa().getCpf(), log.getTipoAcesso().name(),
+                    """, log.getPessoa().getCpf(), log.getTipoAcesso().valorBanco(),
                     SqliteDateTime.format(log.getDataHora()));
         }
         if (!rows.isEmpty()) {
@@ -86,14 +117,13 @@ public class LogRepository {
         Pessoa pessoa = Pessoa.builder()
                 .cpf((String) row.get("pessoa_cpf"))
                 .nome((String) row.get("nome"))
-                .foto((String) row.get("foto"))
                 .build();
 
         Object tipo = row.get("tipo");
         return new Log(
                 ((Number) row.get("id")).longValue(),
                 pessoa,
-                tipo == null ? null : TipoAcesso.valueOf(tipo.toString()),
+                tipo == null ? null : TipoAcesso.deTexto(tipo.toString()),
                 SqliteDateTime.parse(row.get("data_hora"))
         );
     }

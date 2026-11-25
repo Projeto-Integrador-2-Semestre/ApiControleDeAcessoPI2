@@ -18,14 +18,12 @@ import java.util.Map;
 @Component
 public class D1Client {
 
-    private static final String BASE_URL = "https://api.cloudflare.com/client/v4";
-
     private final RestClient restClient;
     private final String queryPath;
 
     public D1Client(RestClient.Builder builder, CloudflareD1Properties props) {
         this.restClient = builder
-                .baseUrl(BASE_URL)
+                .baseUrl(props.baseUrlEfetiva())
                 .defaultHeader("Authorization", "Bearer " + props.apiToken())
                 .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .build();
