@@ -18,9 +18,11 @@ public class LogRepository {
 
     // A foto (base64) nao entra aqui: deixaria a listagem de logs pesada a toa.
     private static final String SELECT = """
-            SELECT l.id, l.pessoa_cpf, l.tipo, l.data_hora, p.nome
+            SELECT l.id, l.pessoa_cpf, l.tipo, l.data_hora, p.nome,
+                   l.catraca_id, c.nome AS catraca_nome, c.local AS catraca_local
             FROM logs l
             LEFT JOIN pessoa p ON p.cpf = l.pessoa_cpf
+            LEFT JOIN catraca c ON c.id = l.catraca_id
             """;
 
     private static final String ORDENACAO = " ORDER BY l.data_hora DESC, l.id DESC";
@@ -120,11 +122,15 @@ public class LogRepository {
                 .build();
 
         Object tipo = row.get("tipo");
+        Object catracaId = row.get("catraca_id");
         return new Log(
                 ((Number) row.get("id")).longValue(),
                 pessoa,
                 tipo == null ? null : TipoAcesso.deTexto(tipo.toString()),
-                SqliteDateTime.parse(row.get("data_hora"))
+                SqliteDateTime.parse(row.get("data_hora")),
+                catracaId instanceof Number n ? n.longValue() : null,
+                (String) row.get("catraca_nome"),
+                (String) row.get("catraca_local")
         );
     }
 }
