@@ -1,0 +1,44 @@
+name: Testes
+
+# Roda os testes da API (./mvnw test) em cada PR e push para main/develop.
+# Os testes nao acessam o Cloudflare D1: usam credenciais falsas e mocks
+# (src/test/resources/application.properties), entao nao precisam de segredos.
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    name: Testes da API
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixa o codigo
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Instala o Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Roda os testes
+        # "sh" porque o mvnw nao esta marcado como executavel no repositorio
+        run: sh ./mvnw -B test
+
+      - name: Guarda o relatorio dos testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-testes
+          path: target/surefire-reports/
+          if-no-files-found: ignore

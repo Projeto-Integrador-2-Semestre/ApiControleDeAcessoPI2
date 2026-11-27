@@ -121,6 +121,8 @@ Todos os erros, inclusive os do proprio Spring (JSON malformado, parametro inval
 
 Os testes nao acessam o D1: usam credenciais falsas (`src/test/resources/application.properties`) e mocks.
 
+No GitHub, o workflow `.github/workflows/testes.yml` roda os testes em cada pull request e push para `main` e `develop`.
+
 ### Rodando os testes no Windows
 
 Se o Maven falhar com `Unable to establish loopback connection`, rode com
