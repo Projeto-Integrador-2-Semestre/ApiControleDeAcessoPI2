@@ -9,10 +9,14 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Cria (se nao existirem) as tabelas que esta API controla e cadastra as catracas padrao
- * quando a tabela estiver vazia. As tabelas pessoa/logs seguem em db/schema.sql.
+ * quando a tabela estiver vazia. As tabelas pessoa/logs seguem em db/schema.sql, mas as colunas
+ * novas delas (status, motivo_bloqueio, data_cadastro, catraca_id) sao adicionadas aqui, sem
+ * apagar nenhum dado (ver {@link #COLUNAS_NOVAS}).
  * Desative com cloudflare.d1.criar-tabelas=false.
  */
 @Component
@@ -43,6 +47,19 @@ public class D1SchemaInitializer implements ApplicationRunner {
             "CREATE INDEX IF NOT EXISTS idx_liberacao_catraca ON liberacao_catraca (catraca_id)"
     );
 
+    /**
+     * Migracoes: {tabela, coluna, definicao}. O SQLite nao tem "ADD COLUMN IF NOT EXISTS", entao
+     * cada coluna so e criada se ainda nao aparecer no PRAGMA table_info da tabela.
+     * Nao da para usar DEFAULT CURRENT_TIMESTAMP num ALTER TABLE; a data_cadastro e preenchida pela API.
+     */
+    static final List<String[]> COLUNAS_NOVAS = List.of(
+            new String[]{"pessoa", "status", "TEXT NOT NULL DEFAULT 'liberado'"},
+            new String[]{"pessoa", "motivo_bloqueio", "TEXT"},
+            new String[]{"pessoa", "data_cadastro", "TEXT"},
+            // Catraca em que a face_api registrou a passagem (nulo nos logs antigos)
+            new String[]{"logs", "catraca_id", "INTEGER"}
+    );
+
     static final List<String[]> CATRACAS_PADRAO = List.of(
             new String[]{"Catraca 01", "Portaria Principal (Entrada A)"},
             new String[]{"Catraca 02", "Portaria Principal (Entrada B)"},
@@ -64,11 +81,32 @@ public class D1SchemaInitializer implements ApplicationRunner {
             return;
         }
         DDL.forEach(d1::query);
+        migrarColunas();
 
         Object total = d1.query("SELECT COUNT(*) AS total FROM catraca").get(0).get("total");
         if (total instanceof Number n && n.intValue() == 0) {
             CATRACAS_PADRAO.forEach(c -> d1.query("INSERT INTO catraca (nome, local) VALUES (?, ?)", c[0], c[1]));
             log.info("Cadastradas {} catracas padrão.", CATRACAS_PADRAO.size());
         }
+    }
+
+    void migrarColunas() {
+        for (String[] coluna : COLUNAS_NOVAS) {
+            Set<String> existentes = colunasDe(coluna[0]);
+            if (existentes.isEmpty()) {
+                // Tabela ainda nao existe (quem cria pessoa/logs e o db/schema.sql ou a face_api)
+                continue;
+            }
+            if (!existentes.contains(coluna[1])) {
+                d1.query("ALTER TABLE " + coluna[0] + " ADD COLUMN " + coluna[1] + " " + coluna[2]);
+                log.info("Coluna {}.{} criada.", coluna[0], coluna[1]);
+            }
+        }
+    }
+
+    private Set<String> colunasDe(String tabela) {
+        return d1.query("PRAGMA table_info(" + tabela + ")").stream()
+                .map(linha -> String.valueOf(linha.get("name")))
+                .collect(Collectors.toSet());
     }
 }
