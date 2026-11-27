@@ -1,5 +1,6 @@
 package com.example.controledeacesso.service;
 
+import com.example.controledeacesso.dispositivos.BloqueioGeralService;
 import com.example.controledeacesso.entity.Catraca;
 import com.example.controledeacesso.entity.Liberacao;
 import com.example.controledeacesso.repositories.CatracaRepository;
@@ -39,6 +40,7 @@ public class LiberacaoService {
     private final LiberacaoRepository liberacaoRepository;
     private final Duration validade;
     private final Clock clock;
+    private final BloqueioGeralService bloqueioGeral;
 
     private final Map<Long, Liberacao> pendentesPorCatraca = new HashMap<>();
     private final Map<Long, Liberacao> recentesPorId = new LinkedHashMap<>(16, 0.75f, false) {
@@ -51,11 +53,13 @@ public class LiberacaoService {
     public LiberacaoService(CatracaRepository catracaRepository,
                             LiberacaoRepository liberacaoRepository,
                             @Value("${catraca.liberacao.validade-segundos:30}") long validadeSegundos,
-                            Optional<Clock> clock) {
+                            Optional<Clock> clock,
+                            BloqueioGeralService bloqueioGeral) {
         this.catracaRepository = catracaRepository;
         this.liberacaoRepository = liberacaoRepository;
         this.validade = Duration.ofSeconds(validadeSegundos);
         this.clock = clock.orElse(Clock.systemUTC());
+        this.bloqueioGeral = bloqueioGeral;
     }
 
     public List<Catraca> listarCatracas() {
@@ -70,6 +74,10 @@ public class LiberacaoService {
     }
 
     public synchronized Liberacao liberar(Long catracaId, String operador, String motivo) {
+        if (bloqueioGeral.ativo()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Bloqueio geral ativo: as liberações manuais estão suspensas.");
+        }
         Catraca catraca = catracaRepository.findById(catracaId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Catraca não encontrada."));
 
