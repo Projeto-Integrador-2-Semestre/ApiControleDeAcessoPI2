@@ -1,6 +1,8 @@
 package com.example.controledeacesso.controller;
 
 import com.example.controledeacesso.dto.PessoaResumoDTO;
+import com.example.controledeacesso.entity.Catraca;
+import com.example.controledeacesso.repositories.CatracaRepository;
 import com.example.controledeacesso.repositories.PessoaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +45,9 @@ class ApiControllerTest {
 
     @MockitoBean
     private PessoaRepository pessoas;
+
+    @MockitoBean
+    private CatracaRepository catracas;
 
     private String token;
 
@@ -155,5 +160,17 @@ class ApiControllerTest {
         mvc.perform(get("/logs").param("limite", "abc").header("Authorization", token))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").exists());
+    }
+
+    @Test
+    void dispositivosExigemLoginEComandosSemReleDao501() throws Exception {
+        mvc.perform(get("/dispositivos/estacoes")).andExpect(status().isUnauthorized());
+        when(catracas.findById(1L)).thenReturn(Optional.of(new Catraca(1L, "Catraca 01", "Portaria")));
+        mvc.perform(post("/dispositivos/estacoes/{id}/testar-giro", 1).header("Authorization", token))
+                .andExpect(status().isNotImplemented())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("relé")));
+        mvc.perform(post("/dispositivos/estacoes/{id}/ping", 99).header("Authorization", token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail").value("Estação não encontrada."));
     }
 }

@@ -84,6 +84,35 @@ public class LogRepository {
         return mapear(d1.query(sql.toString(), params.toArray()));
     }
 
+    /** Ultimas passagens registradas por uma catraca (syslog da estacao no monitoramento). */
+    public List<Log> findByCatraca(long catracaId, int limite) {
+        return mapear(d1.query(SELECT + " WHERE l.catraca_id = ?" + ORDENACAO + " LIMIT ?", catracaId, limite));
+    }
+
+    /** Passagens de uma catraca: quantas desde o instante pedido e a data da ultima (em UTC). */
+    public record ResumoCatraca(long passagensDesde, LocalDateTime ultimaPassagem) {
+    }
+
+    /** Resumo de todas as catracas numa unica consulta: catraca_id -> {passagens desde, ultima}. */
+    public Map<Long, ResumoCatraca> resumoPorCatraca(LocalDateTime desdeUtc) {
+        Map<Long, ResumoCatraca> resumo = new java.util.HashMap<>();
+        for (Map<String, Object> row : d1.query("""
+                SELECT catraca_id,
+                       SUM(CASE WHEN datetime(data_hora) >= ? THEN 1 ELSE 0 END) AS desde,
+                       MAX(datetime(data_hora)) AS ultima
+                FROM logs WHERE catraca_id IS NOT NULL GROUP BY catraca_id
+                """, SqliteDateTime.format(desdeUtc))) {
+            Object id = row.get("catraca_id");
+            Object desde = row.get("desde");
+            if (id instanceof Number n) {
+                resumo.put(n.longValue(), new ResumoCatraca(
+                        desde instanceof Number d ? d.longValue() : 0,
+                        SqliteDateTime.parse(row.get("ultima"))));
+            }
+        }
+        return resumo;
+    }
+
     /** Insere um novo log. Se dataHora for nula, o banco usa CURRENT_TIMESTAMP. */
     public Log save(Log log) {
         List<Map<String, Object>> rows;
