@@ -3,7 +3,9 @@ package com.example.controledeacesso.controller;
 import com.example.controledeacesso.dto.LiberarCatracaRequest;
 import com.example.controledeacesso.entity.Catraca;
 import com.example.controledeacesso.entity.Liberacao;
+import com.example.controledeacesso.dispositivos.TelemetriaService;
 import com.example.controledeacesso.service.LiberacaoService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +25,7 @@ import java.util.List;
 public class CatracaController {
 
     private final LiberacaoService liberacaoService;
+    private final TelemetriaService telemetria;
 
     @GetMapping
     public List<Catraca> listar() {
@@ -51,7 +54,9 @@ public class CatracaController {
      * houver uma pendente para esta catraca; 204 quando nao houver.
      */
     @PostMapping("/{id}/liberacao/confirmar")
-    public ResponseEntity<Liberacao> confirmar(@PathVariable Long id) {
+    public ResponseEntity<Liberacao> confirmar(@PathVariable Long id, HttpServletRequest requisicao) {
+        // Cada consulta do tablet e o sinal de vida usado pelo monitoramento (GET /dispositivos/estacoes)
+        telemetria.registrarContato(id, ipDoCliente(requisicao));
         return liberacaoService.confirmar(id)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
@@ -69,5 +74,14 @@ public class CatracaController {
     @GetMapping("/liberacoes")
     public List<Liberacao> listarLiberacoes(@RequestParam(required = false) Integer limite) {
         return liberacaoService.listarRecentes(limite);
+    }
+
+    /** Atras do proxy do Render o IP real vem no X-Forwarded-For (o primeiro da lista). */
+    private static String ipDoCliente(HttpServletRequest requisicao) {
+        String encaminhado = requisicao.getHeader("X-Forwarded-For");
+        if (encaminhado != null && !encaminhado.isBlank()) {
+            return encaminhado.split(",")[0].trim();
+        }
+        return requisicao.getRemoteAddr();
     }
 }

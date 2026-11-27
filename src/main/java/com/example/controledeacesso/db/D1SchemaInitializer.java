@@ -44,7 +44,15 @@ public class D1SchemaInitializer implements ApplicationRunner {
                 status        TEXT NOT NULL DEFAULT 'pendente',
                 FOREIGN KEY (catraca_id) REFERENCES catraca(id) ON DELETE CASCADE
             )""",
-            "CREATE INDEX IF NOT EXISTS idx_liberacao_catraca ON liberacao_catraca (catraca_id)"
+            "CREATE INDEX IF NOT EXISTS idx_liberacao_catraca ON liberacao_catraca (catraca_id)",
+            // Ajustes globais (ex.: bloqueio_geral), lidos tambem pela face_api
+            """
+            CREATE TABLE IF NOT EXISTS configuracao (
+                chave        TEXT PRIMARY KEY,
+                valor        TEXT,
+                alterado_em  TEXT,
+                alterado_por TEXT
+            )"""
     );
 
     /**

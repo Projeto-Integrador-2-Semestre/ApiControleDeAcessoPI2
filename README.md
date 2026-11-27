@@ -74,6 +74,28 @@ Content-Type: application/json
 | POST | `/catracas/{id}/liberar` | Liberacao manual pedida pelo painel (`{"operador": "...", "motivo": "..."}`) |
 | POST | `/catracas/{id}/liberacao/confirmar` | Consulta do tablet (aberto): 200 com a liberacao pendente ou 204 |
 | GET | `/catracas/liberacoes` e `/catracas/liberacoes/{id}` | Historico / status de uma liberacao (`pendente`, `confirmada`, `expirada`) |
+| GET | `/dispositivos/estacoes` e `/dispositivos/estacoes/{id}` | Monitoramento: totem online/offline, IP, reconhecimento (face_api) e passagens de hoje |
+| GET | `/dispositivos/estacoes/{id}/logs` | Syslog da estacao: passagens, liberacoes manuais e eventos do totem |
+| POST | `/dispositivos/estacoes/{id}/ping` | Ultimo contato do totem e latencia da face_api |
+| POST | `/dispositivos/estacoes/{id}/sincronizar-facial` | Pede para a face_api reler as fotos agora (502 se ela nao responder) |
+| POST | `/dispositivos/estacoes/{id}/testar-giro` e `.../reiniciar` | 501: dependem do rele da catraca, que o totem ainda nao aciona |
+| GET / POST | `/dispositivos/bloqueio-geral` | Estado / ativa (`{"ativo": true}`) ou desativa (`{"ativo": false}`) o bloqueio geral |
+
+### Monitoramento de dispositivos
+
+- **Totem online:** o tablet ja consulta `POST /catracas/{id}/liberacao/confirmar` a cada ~1,5 s; cada consulta conta como
+  sinal de vida. Sem contato ha mais de 10 s, ele aparece offline. Fica em memoria (volta em 2 s depois de um reinicio da API).
+- **Reconhecimento:** `GET /health` da face_api (`FACE_API_URL`): `reconhecendo`, `carregando`, `offline` ou `nao_configurado`.
+- **statusGeral:** `operacional` (totem online e reconhecimento pronto), `sincronizando` (face_api carregando) ou `alerta`.
+- **Bloqueio geral:** gravado na tabela `configuracao` (chave `bloqueio_geral`). Enquanto ativo, a face_api recusa todos os
+  rostos (`motivo: "bloqueio_geral"`) e `POST /catracas/{id}/liberar` responde 409. O travamento fisico depende do rele.
+
+```json
+{"id": 1, "nome": "Catraca 01", "local": "Portaria Principal (Entrada A)", "statusGeral": "operacional",
+ "totem": {"online": true, "ultimoContato": "2026-11-27T01:18:03Z", "segundosDesdeContato": 1, "ip": "177.10.20.30"},
+ "reconhecimento": {"status": "reconhecendo", "rostosEmCache": 3, "antiSpoofing": true, "latenciaMs": 230},
+ "passagensHoje": 12, "ultimaPassagem": "2026-11-27T01:10:00Z", "bloqueioGeral": false}
+```
 
 ### Formatos de resposta
 
@@ -109,7 +131,9 @@ Todos os erros, inclusive os do proprio Spring (JSON malformado, parametro inval
 | 400 | Dados invalidos (CPF sem 11 digitos, nome vazio, foto faltando, status invalido, JSON malformado) |
 | 401 | Sem token, token invalido ou vencido, ou login errado |
 | 404 | Pessoa, catraca ou rota nao encontrada |
-| 409 | CPF ja cadastrado |
+| 409 | CPF ja cadastrado, ou liberacao manual com o bloqueio geral ativo |
+| 501 | Comando de estacao que ainda depende do rele (testar giro, reiniciar) |
+| 502 | face_api nao respondeu ao pedido de sincronizacao |
 | 413 | Foto maior que o limite de upload |
 | 503 | Cloudflare D1 indisponivel |
 

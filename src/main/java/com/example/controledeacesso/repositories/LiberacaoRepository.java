@@ -48,6 +48,11 @@ public class LiberacaoRepository {
                 .map(LiberacaoRepository::mapear).toList();
     }
 
+    public List<Liberacao> findRecentesDaCatraca(long catracaId, int limite) {
+        return d1.query(SELECT + " WHERE lc.catraca_id = ? ORDER BY lc.id DESC LIMIT ?", catracaId, limite).stream()
+                .map(LiberacaoRepository::mapear).toList();
+    }
+
     private static String texto(Instant instante) {
         return instante == null ? null : instante.toString();
     }

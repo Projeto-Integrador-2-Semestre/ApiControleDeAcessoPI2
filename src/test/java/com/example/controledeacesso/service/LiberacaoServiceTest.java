@@ -1,5 +1,6 @@
 package com.example.controledeacesso.service;
 
+import com.example.controledeacesso.dispositivos.BloqueioGeralService;
 import com.example.controledeacesso.entity.Catraca;
 import com.example.controledeacesso.entity.Liberacao;
 import com.example.controledeacesso.repositories.CatracaRepository;
@@ -31,6 +32,7 @@ class LiberacaoServiceTest {
     private LiberacaoRepository liberacoes;
     private RelogioAjustavel relogio;
     private LiberacaoService service;
+    private BloqueioGeralService bloqueioGeral;
 
     @BeforeEach
     void setUp() {
@@ -40,7 +42,8 @@ class LiberacaoServiceTest {
         AtomicLong ids = new AtomicLong();
         when(catracas.findById(1L)).thenReturn(Optional.of(new Catraca(1L, "Catraca 01", "Portaria")));
         when(liberacoes.insert(any())).thenAnswer(inv -> ((Liberacao) inv.getArgument(0)).comId(ids.incrementAndGet()));
-        service = new LiberacaoService(catracas, liberacoes, 30, Optional.of(relogio));
+        bloqueioGeral = mock(BloqueioGeralService.class);
+        service = new LiberacaoService(catracas, liberacoes, 30, Optional.of(relogio), bloqueioGeral);
     }
 
     @Test
@@ -82,6 +85,14 @@ class LiberacaoServiceTest {
     void catracaInexistenteDa404() {
         when(catracas.findById(99L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.liberar(99L, null, null)).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void bloqueioGeralImpedeLiberacaoManual() {
+        when(bloqueioGeral.ativo()).thenReturn(true);
+        assertThatThrownBy(() -> service.liberar(1L, "Operador", null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Bloqueio geral ativo");
     }
 
     @Test
